@@ -29,6 +29,18 @@ import { afterNextRender } from '@polymer/polymer/lib/utils/render-status.js';
 */
 Polymer({
   _template: html`
+    <style include="nuxeo-styles">
+      #error {
+        margin-bottom: 8px;
+      }
+
+      .error {
+        border-left: 4px solid var(--paper-input-container-invalid-color, red);
+        color: var(--paper-input-container-invalid-color, red);
+        padding-left: 8px;
+      }
+    </style>
+    <div id="error"></div>
     <nuxeo-layout
       id="layout"
       href="[[_href]]"
@@ -98,6 +110,7 @@ Polymer({
   },
 
   _elementChanged() {
+    this._resetValidationErrors();
     this._model = { document: this.document };
     // forward document path change events
     if (this.element) {
@@ -138,6 +151,56 @@ Polymer({
             return focusableElement;
           }
         });
+    }
+  },
+
+  reportValidation(validationReport) {
+    this._resetValidationErrors();
+    validationReport.violations.reverse().forEach((v) => {
+      this.invalid = true;
+      if (v.path) {
+        v.path.forEach((p) => {
+          const widgets = this._getBoundElements(`document.properties.${p.field_name}`);
+          if (widgets) {
+            const msg = this.i18n(v.messageKey, v.invalid_value, p.field_name);
+            if (msg === v.messageKey && v.constraint && v.constraint.name) {
+              this._addValidationError(
+                this.i18n(
+                  `label.schema.constraint.violation.${v.constraint.name}`,
+                  v.invalid_value,
+                  p.field_name,
+                  ...Object.values(v.constraint.parameters),
+                ),
+              );
+            } else {
+              this._addValidationError(msg);
+            }
+            Object.values(widgets).forEach((widget) => {
+              // we can at least flag the widget `invalid`
+              widget.invalid = true;
+            });
+          } else {
+            this._addValidationError(this.i18n(v.messageKey, v.invalid_value, p.field_name));
+          }
+        });
+      } else {
+        this._addValidationError(this.i18n(v.messageKey));
+      }
+    });
+  },
+
+  _addValidationError(message) {
+    const label = document.createElement('span');
+    label.setAttribute('class', 'error');
+    label.innerHTML = message;
+    this.$.error.appendChild(label);
+    this.$.error.scrollIntoView();
+    this.$.error.focus();
+  },
+
+  _resetValidationErrors() {
+    while (this.$.error.firstChild) {
+      this.$.error.removeChild(this.$.error.firstChild);
     }
   },
 });
