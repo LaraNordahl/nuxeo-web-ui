@@ -300,3 +300,17 @@ Then(/^I can unpublish the document$/, function() {
   unpublishConfirm.waitForVisible();
   unpublishConfirm.click();
 });
+
+Then('I can see {int} validation error(s) in the {string} edit form', function(nbErrors, docType) {
+  const { browser } = this.ui;
+  const form = browser.editForm(docType);
+  form.waitForVisible();
+  form.errorMessages.length.should.be.equals(nbErrors);
+});
+
+Then('I can see the {string} error message in the {string} edit form', function(message, docType) {
+  const { browser } = this.ui;
+  const form = browser.editForm(docType);
+  form.waitForVisible();
+  form.errorMessages.some((err) => err === message);
+});
