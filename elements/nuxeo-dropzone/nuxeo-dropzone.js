@@ -338,14 +338,14 @@ Polymer({
   },
 
   _computeParsedXpath(xpath) {
-    return this.formatPropertyXpath(xpath);
+    return `document.properties.${this.formatPropertyXpath(xpath)}`;
   },
 
   importBatch(data) {
     data.stopPropagation();
     if (this.blobList) {
-      if (!this.get(`document.properties.${this._parsedXpath}`)) {
-        this.set(`document.properties.${this._parsedXpath}`, []);
+      if (!this.get(this._parsedXpath)) {
+        this.set(this._parsedXpath, []);
       }
       this.files.forEach((file, index) => {
         const uploadedFile = {
@@ -353,13 +353,13 @@ Polymer({
           'upload-fileId': index.toString(),
         };
         this.push(
-          `document.properties.${this._parsedXpath}`,
+          this._parsedXpath,
           // Handle special case when using files:files
           this.xpath === 'files:files' ? { file: uploadedFile } : uploadedFile,
         );
       });
     } else {
-      this.set(`document.properties.${this._parsedXpath}`, {
+      this.set(this._parsedXpath, {
         'upload-batch': data.detail.batchId,
         'upload-fileId': '0',
       });
@@ -370,8 +370,8 @@ Polymer({
   _blobPicked(e) {
     this.set('files', e.detail.blobs);
     if (this.blobList) {
-      if (!this.get(`document.properties.${this._parsedXpath}`)) {
-        this.set(`document.properties.${this._parsedXpath}`, []);
+      if (!this.get(this._parsedXpath)) {
+        this.set(this._parsedXpath, []);
       }
       this.files.forEach((file) => {
         const uploadedFile = {
@@ -380,14 +380,14 @@ Polymer({
           fileId: file.fileId,
         };
         this.push(
-          `document.properties.${this._parsedXpath}`,
+          this._parsedXpath,
           // Handle special case when using files:files
           this.xpath === 'files:files' ? { file: uploadedFile } : uploadedFile,
         );
       });
     } else {
       const file = e.detail.blobs[0];
-      this.set(`document.properties.${this._parsedXpath}`, {
+      this.set(this._parsedXpath, {
         providerId: file.providerId,
         user: file.user,
         fileId: file.fileId,
@@ -399,11 +399,7 @@ Polymer({
   _handleBlobUploaded() {
     if (this.updateDocument) {
       const props = {};
-      this._createNestedObjectRecursive(
-        props,
-        this._parsedXpath.split('.'),
-        this.get(`document.properties.${this._parsedXpath}`),
-      );
+      this._createNestedObjectRecursive(props, this.xpath.split('/'), this.get(this._parsedXpath));
       this.$.doc.data = {
         'entity-type': 'document',
         repository: this.document.repository,
@@ -422,12 +418,12 @@ Polymer({
   },
 
   _deleteFile(e) {
-    if (!this.updateDocument && this.blobList && Array.isArray(this.get(`document.properties.${this._parsedXpath}`))) {
-      this.splice(`document.properties.${this._parsedXpath}`, e.model.itemsIndex, 1);
+    if (!this.updateDocument && this.blobList && Array.isArray(this.get(this._parsedXpath))) {
+      this.splice(this._parsedXpath, e.model.itemsIndex, 1);
       this.splice('files', e.model.itemsIndex, 1);
     } else {
       this._reset();
-      this.set(`document.properties.${this._parsedXpath}`, '');
+      this.set(this._parsedXpath, '');
     }
   },
 
