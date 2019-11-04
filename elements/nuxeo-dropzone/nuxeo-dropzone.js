@@ -207,6 +207,7 @@ Polymer({
   properties: {
     /**
      * Input Document.
+     * It's entity type can be 'document' or 'task'
      */
     document: {
       type: Object,
@@ -235,6 +236,7 @@ Polymer({
     },
     /**
      * Path to which the file(s) should be uploaded.
+     * When used on 'document' entity type it will be under 'properties' and for 'task' it will be under 'variables'
      * For example `xpath="files:files"`.
      * By default it will consider `file:content`.
      */
@@ -244,6 +246,7 @@ Polymer({
     },
     /**
      * This flag determines whether the file should be immediately uploaded or not.
+     * It is only applicable for 'document' entity type.
      */
     updateDocument: {
       type: Boolean,
@@ -291,7 +294,7 @@ Polymer({
      */
     _parsedXpath: {
       type: String,
-      computed: '_computeParsedXpath(xpath)',
+      computed: '_computeParsedXpath(xpath, document)',
     },
     /**
      * Content enrichers to be passed on to `nuxeo-document` resource.
@@ -337,8 +340,11 @@ Polymer({
     this.$$('input').click();
   },
 
-  _computeParsedXpath(xpath) {
-    return `document.properties.${this.formatPropertyXpath(xpath)}`;
+  _computeParsedXpath(xpath, document) {
+    return (
+      document &&
+      `document.${document['entity-type'] === 'task' ? 'variables' : 'properties'}.${this.formatPropertyXpath(xpath)}`
+    );
   },
 
   importBatch(data) {
