@@ -149,7 +149,6 @@ Polymer({
     </style>
 
     <nuxeo-connection id="nx"></nuxeo-connection>
-    <nuxeo-document id="doc" doc-id="[[document.uid]]" enrichers="[[enrichers]]"></nuxeo-document>
 
     <template is="dom-if" if="[[label]]">
       <label id="label" required$="[[required]]">[[label]]</label>
@@ -176,7 +175,7 @@ Polymer({
               noink
               icon="nuxeo:delete"
               on-tap="_deleteFile"
-              hidden$="[[!_areActionsVisible(hasFiles, updateDocument, uploading)]]"
+              hidden$="[[!_areActionsVisible(hasFiles, uploading)]]"
             ></paper-icon-button>
             <div hidden$="[[!_showAbort(uploading)]]">
               <paper-icon-button noink icon="icons:cancel" on-tap="_abortUpload"></paper-icon-button>
@@ -187,7 +186,7 @@ Polymer({
       </template>
     </div>
 
-    <div id="dropzone" hidden$="[[!_isDropzoneVisible(hasFiles, updateDocument, blobList)]]">
+    <div id="dropzone" hidden$="[[!_isDropzoneVisible(hasFiles, multiple)]]">
       <div id="container">
         <a href="javascript:undefined" on-tap="open"
           >[[_computeMessage(draggingFiles, message, dragContentMessage, i18n)]]</a
@@ -205,6 +204,14 @@ Polymer({
   behaviors: [UploaderBehavior, FormatBehavior, IronValidatableBehavior],
 
   properties: {
+    /**
+     * Blob reference (`upload-batch` and `upload-fileId).
+     */
+    value: {
+      type: Object,
+      notify: true,
+    },
+
     /**
      * Input Document.
      * It's entity type can be 'document' or 'task'
@@ -230,7 +237,7 @@ Polymer({
     /**
      * This flag determines whether the dropzone allows multiple files or not.
      */
-    blobList: {
+    multiple: {
       type: Boolean,
       value: false,
     },
@@ -349,7 +356,7 @@ Polymer({
 
   importBatch(data) {
     data.stopPropagation();
-    if (this.blobList) {
+    if (this.multiple) {
       if (!this.get(this._parsedXpath)) {
         this.set(this._parsedXpath, []);
       }
@@ -375,7 +382,7 @@ Polymer({
 
   _blobPicked(e) {
     this.set('files', e.detail.blobs);
-    if (this.blobList) {
+    if (this.multiple) {
       if (!this.get(this._parsedXpath)) {
         this.set(this._parsedXpath, []);
       }
@@ -403,28 +410,13 @@ Polymer({
   },
 
   _handleBlobUploaded() {
-    if (this.updateDocument) {
-      const props = {};
-      this._createNestedObjectRecursive(props, this.xpath.split('/'), this.get(this._parsedXpath));
-      this.$.doc.data = {
-        'entity-type': 'document',
-        repository: this.document.repository,
-        uid: this.document.uid,
-        properties: props,
-      };
-      this.$.doc.put().then((response) => {
-        this.document = response;
-        this.fire('notify', { message: this.i18n(this.uploadedMessage) });
-        this.fire('document-updated');
-      });
-    } else {
-      this.fire('notify', { message: this.i18n(this.uploadedMessage) });
-    }
+    this.fire('content-changed', { files: this.files });
+    this.fire('notify', { message: this.i18n(this.uploadedMessage) });
     this.invalid = false;
   },
 
   _deleteFile(e) {
-    if (!this.updateDocument && this.blobList && Array.isArray(this.get(this._parsedXpath))) {
+    if (this.multiple && Array.isArray(this.get(this._parsedXpath))) {
       this.splice(this._parsedXpath, e.model.itemsIndex, 1);
       this.splice('files', e.model.itemsIndex, 1);
     } else {
@@ -479,11 +471,11 @@ Polymer({
     // Area to drop files should stay visible when the element is attached to a blob list property
     // and `updateDocument` is false (e.g when using the element on a form: creation or edition of documents).
     // This will allow the user to manage the list of files.
-    return (!this.updateDocument && this.blobList) || !this.hasFiles;
+    return this.multiple || !this.hasFiles;
   },
 
   _areActionsVisible() {
-    return !this.updateDocument && this.hasFiles && !this.uploading;
+    return this.hasFiles && !this.uploading;
   },
 
   _computeEnrichers() {
