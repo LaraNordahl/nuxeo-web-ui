@@ -211,15 +211,6 @@ Polymer({
       type: Object,
       notify: true,
     },
-
-    /**
-     * Input Document.
-     * It's entity type can be 'document' or 'task'
-     */
-    document: {
-      type: Object,
-      notify: true,
-    },
     /**
      * The label for this element.
      */
@@ -242,23 +233,12 @@ Polymer({
       value: false,
     },
     /**
-     * Path to which the file(s) should be uploaded.
-     * When used on 'document' entity type it will be under 'properties' and for 'task' it will be under 'variables'
-     * For example `xpath="files:files"`.
-     * By default it will consider `file:content`.
+     * Key where the blob content will be stored when using blob lists.
+     * For example on files schema `files:files` is used to store blobs, each blob being stored in `file` key.
+     * In this specific case value-key='file'.
      */
-    xpath: {
+    valueKey: {
       type: String,
-      value: 'file:content',
-    },
-    /**
-     * This flag determines whether the file should be immediately uploaded or not.
-     * It is only applicable for 'document' entity type.
-     */
-    updateDocument: {
-      type: Boolean,
-      value: false,
-      reflectToAttribute: true,
     },
     /**
      * Message to show when file is uploaded successfully.
@@ -296,23 +276,6 @@ Polymer({
       value: false,
       notify: true,
     },
-    /**
-     * A string containing an xpath expression, connected by dot (.) characters instead of slashes (/).
-     */
-    _parsedXpath: {
-      type: String,
-      computed: '_computeParsedXpath(xpath, document)',
-    },
-    /**
-     * Content enrichers to be passed on to `nuxeo-document` resource.
-     * Can be an object with entity type as keys or list or string (which defaults to `document` entity type).
-     */
-    enrichers: {
-      type: Object,
-      value() {
-        return this._computeEnrichers();
-      },
-    },
     _errorMessage: {
       type: String,
     },
@@ -328,10 +291,10 @@ Polymer({
 
   listeners: {
     batchFinished: 'importBatch',
-    'nx-blob-picked': '_blobPicked',
+    'nx-blob-picked': 'importBatch',
   },
 
-  observers: ['_reset(document)', '_filesChanged(files.splices)'],
+  observers: ['_reset(value)', '_filesChanged(files.splices)'],
 
   attached() {
     this.connection = this.$.nx;
@@ -347,86 +310,81 @@ Polymer({
     this.$$('input').click();
   },
 
-  _computeParsedXpath(xpath, document) {
-    return (
-      document &&
-      `document.${document['entity-type'] === 'task' ? 'variables' : 'properties'}.${this.formatPropertyXpath(xpath)}`
-    );
-  },
-
   importBatch(data) {
-    data.stopPropagation();
-    if (this.multiple) {
-      if (!this.get(this._parsedXpath)) {
-        this.set(this._parsedXpath, []);
-      }
-      this.files.forEach((file, index) => {
-        const uploadedFile = {
-          'upload-batch': data.detail.batchId,
-          'upload-fileId': index.toString(),
-        };
-        this.push(
-          this._parsedXpath,
-          // Handle special case when using files:files
-          this.xpath === 'files:files' ? { file: uploadedFile } : uploadedFile,
-        );
-      });
+    if (data.type === 'nx-blob-picked') {
+      this.set('files', data.detail.blobs);
     } else {
-      this.set(this._parsedXpath, {
-        'upload-batch': data.detail.batchId,
-        'upload-fileId': '0',
-      });
+      data.stopPropagation();
     }
-    this._handleBlobUploaded();
-  },
-
-  _blobPicked(e) {
-    this.set('files', e.detail.blobs);
+    const value = this._getFiles(data);
     if (this.multiple) {
-      if (!this.get(this._parsedXpath)) {
-        this.set(this._parsedXpath, []);
+      if (!this.value || !Array.isArray(this.value)) {
+        this.value = [];
       }
-      this.files.forEach((file) => {
-        const uploadedFile = {
-          providerId: file.providerId,
-          user: file.user,
-          fileId: file.fileId,
-        };
-        this.push(
-          this._parsedXpath,
-          // Handle special case when using files:files
-          this.xpath === 'files:files' ? { file: uploadedFile } : uploadedFile,
-        );
-      });
+      this.push('value', ...value);
     } else {
-      const file = e.detail.blobs[0];
-      this.set(this._parsedXpath, {
-        providerId: file.providerId,
-        user: file.user,
-        fileId: file.fileId,
-      });
+      this.set('value', value);
     }
-    this._handleBlobUploaded();
-  },
-
-  _handleBlobUploaded() {
-    this.fire('content-changed', { files: this.files });
     this.fire('notify', { message: this.i18n(this.uploadedMessage) });
     this.invalid = false;
   },
 
+  _getFiles(data) {
+    let uploadedFile;
+    if (this.multiple) {
+      const files = [];
+      this.files.forEach((file, index) => {
+        if (data.type === 'nx-blob-picked') {
+          uploadedFile = {
+            providerId: file.providerId,
+            user: file.user,
+            fileId: file.fileId,
+          };
+        } else {
+          uploadedFile = {
+            'upload-batch': data.detail.batchId,
+            'upload-fileId': index.toString(),
+          };
+        }
+
+        if (this.valueKey) {
+          const wrappedFile = {};
+          wrappedFile[this.valueKey] = uploadedFile;
+          files.push(wrappedFile);
+        } else {
+          files.push(uploadedFile);
+        }
+      });
+      return files;
+    }
+    if (data.type === 'nx-blob-picked') {
+      const file = data.detail.blobs[0];
+      uploadedFile = {
+        providerId: file.providerId,
+        user: file.user,
+        fileId: file.fileId,
+      };
+    } else {
+      uploadedFile = {
+        'upload-batch': data.detail.batchId,
+        'upload-fileId': '0',
+      };
+    }
+    return uploadedFile;
+  },
+
   _deleteFile(e) {
-    if (this.multiple && Array.isArray(this.get(this._parsedXpath))) {
-      this.splice(this._parsedXpath, e.model.itemsIndex, 1);
+    if (this.multiple && Array.isArray(this.value)) {
+      this.value.splice(e.model.itemsIndex, 1);
       this.splice('files', e.model.itemsIndex, 1);
     } else {
       this._reset();
-      this.set(this._parsedXpath, '');
+      this.value = '';
     }
   },
 
-  _reset(document) {
-    if (document === undefined) {
+  _reset(value) {
+    if (value === undefined) {
       this.cancelBatch();
     }
     this.$.input.value = '';
@@ -469,46 +427,13 @@ Polymer({
 
   _isDropzoneVisible() {
     // Area to drop files should stay visible when the element is attached to a blob list property
-    // and `updateDocument` is false (e.g when using the element on a form: creation or edition of documents).
+    // and, e.g, when using the element on a form: creation or edition of documents.
     // This will allow the user to manage the list of files.
     return this.multiple || !this.hasFiles;
   },
 
   _areActionsVisible() {
     return this.hasFiles && !this.uploading;
-  },
-
-  _computeEnrichers() {
-    return {
-      document: ['preview'],
-      blob: (Nuxeo.UI && Nuxeo.UI.config && Nuxeo.UI.config.enrichers && Nuxeo.UI.config.enrichers.blob) || [
-        'appLinks',
-      ],
-    };
-  },
-
-  /**
-   * Recursive method to create nested objects when they don't exist in a parent object.
-   * It does not change any other existing objects or inner objects, only the ones referred in 'path'.
-   * @param obj Parent Object where inner nested objects should be created.
-   * @param path Array containing the inner object keys.
-   * @param value Object that should be set to last nested object.
-   * Usage Example:
-   *
-   *  - Creating document properties using xpath:
-   *
-   *    const xpath = 'my:custom/field/subfield/x'
-   *    _createNestedObjectRecursive(this.document.properties, xpath.split('/'), 'should set this value');
-   *
-   */
-  _createNestedObjectRecursive(obj, path, value) {
-    if (path.length === 0) {
-      return;
-    }
-    if ((!Object.prototype.hasOwnProperty.call(obj, path[0]) && !obj[path[0]]) || typeof obj[path[0]] !== 'object') {
-      obj[path[0]] = path.length === 1 && value ? value : {};
-    }
-    return this._createNestedObjectRecursive(obj[path[0]], path.slice(1), value);
   },
 
   _abortUpload(e) {
