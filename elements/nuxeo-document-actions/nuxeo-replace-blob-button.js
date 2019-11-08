@@ -122,7 +122,7 @@ Polymer({
   },
 
   _cancel() {
-    this.$.dropzone._deleteFile();
+    this.$.dropzone._reset();
   },
 
   /**
