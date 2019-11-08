@@ -16,6 +16,7 @@ limitations under the License.
 */
 import '@polymer/polymer/polymer-legacy.js';
 
+import '@nuxeo/nuxeo-elements/nuxeo-document.js';
 import { FiltersBehavior } from '@nuxeo/nuxeo-ui-elements/nuxeo-filters-behavior.js';
 import { I18nBehavior } from '@nuxeo/nuxeo-ui-elements/nuxeo-i18n-behavior.js';
 import '../nuxeo-document-blob/nuxeo-document-blob.js';
@@ -51,6 +52,8 @@ Polymer({
       }
     </style>
 
+    <nuxeo-document id="doc" doc-id="[[document.uid]]"></nuxeo-document>
+
     <template is="dom-if" if="[[_isAvailable(document, xpath)]]">
       <h3>[[i18n('documentAttachments.heading')]]</h3>
 
@@ -67,13 +70,12 @@ Polymer({
 
       <template is="dom-if" if="[[_hasWritePermission(document)]]">
         <nuxeo-dropzone
-          document="{{document}}"
-          xpath="[[xpath]]"
+          value="{{document.properties.files:files}}"
+          multiple
+          value-key="file"
           uploaded-message="[[i18n('documentAttachments.upload.uploaded')]]"
           message="[[i18n('documentAttachments.upload.add')]]"
           drag-content-message="[[i18n('documentAttachments.upload.drop')]]"
-          blob-list
-          update-document
         >
         </nuxeo-dropzone>
       </template>
@@ -90,6 +92,30 @@ Polymer({
       type: String,
       value: 'files:files',
     },
+  },
+
+  created() {
+    this._createMethodObserver('_valueChanged(document.properties.files:files.splices)', true);
+  },
+
+  _valueChanged(e) {
+    if (!e) {
+      return;
+    }
+    const props = {};
+    props[this.xpath] = this.document.properties[this.xpath];
+    this.$.doc.data = {
+      'entity-type': 'document',
+      repository: this.document.repository,
+      uid: this.document.uid,
+      properties: props,
+    };
+
+    this.$.doc.put().then((response) => {
+      this.document = response;
+      this.fire('notify', { message: this.i18n(this.uploadedMessage) });
+      this.fire('document-updated');
+    });
   },
 
   _hasFiles(doc) {
