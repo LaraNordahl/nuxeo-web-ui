@@ -53,6 +53,10 @@ Polymer({
         @apply --layout-justified;
       }
 
+      .saving-label {
+        margin-right: 8px;
+      }
+
       nuxeo-document-layout {
         margin-bottom: 24px;
       }
@@ -73,7 +77,15 @@ Polymer({
         </div>
         <div class="actions">
           <paper-button on-tap="cancel" noink>[[i18n('command.cancel')]]</paper-button>
-          <paper-button id="save" on-tap="save" noink class="primary">[[i18n('command.save')]]</paper-button>
+          <paper-button id="save" on-tap="save" noink class="primary" disabled$="[[saving]]">
+            <template is="dom-if" if="[[!saving]]">
+              [[i18n('command.save')]]
+            </template>
+            <template is="dom-if" if="[[saving]]">
+              <span class="saving-label">[[i18n('command.save')]]</span>
+              <paper-spinner-lite active></paper-spinner-lite>
+            </template>
+          </paper-button>
         </div>
       </form>
     </iron-form>
@@ -96,22 +108,14 @@ Polymer({
     headers: {
       type: Object,
     },
+
+    saving: {
+      type: Boolean,
+      value: false,
+    },
   },
 
   observers: ['_documentChanged(document.*)'],
-
-  _validate() {
-    // run our custom validation function first to allow setting custom native validity
-    const result = this._doNativeValidation(this.$.form) && this.$.form.validate();
-    if (result) {
-      return result;
-    }
-    const { layout } = this.$.layout.$;
-    const nodes = layout._getValidatableElements(layout.element.root);
-    const invalidField = nodes.find((node) => node.invalid);
-    invalidField.scrollIntoView();
-    invalidField.focus();
-  },
 
   _doSave() {
     if (!this.document.uid) {
@@ -128,17 +132,43 @@ Polymer({
   },
 
   save() {
-    if (!this._validate()) {
-      return;
-    }
-    this._doSave().then(this._refresh.bind(this), (err) => {
-      if (err && err['entity-type'] === 'validation_report') {
-        this.$.layout.reportValidation(err);
-      } else {
-        this.fire('notify', { message: this.i18n('documentEdit.saveError') });
-        console.error(err);
+    const { layout } = this.$.layout.$;
+    const elementsToValidate = layout._getValidatableElements(layout.element.root);
+    elementsToValidate.push(layout.element);
+    let valid = true;
+    const validations = [];
+    elementsToValidate.forEach((el) => {
+      if (el.validate) {
+        const elValidate = el.validate();
+        if (typeof elValidate.then === 'function') {
+          validations.push(elValidate);
+        } else {
+          valid = valid && elValidate;
+        }
       }
     });
+    if (!valid) {
+      const invalidField = elementsToValidate.find((node) => node.invalid);
+      invalidField.scrollIntoView();
+      invalidField.focus();
+      return;
+    }
+    this.set('saving', true);
+    Promise.all(validations)
+      .then(() => this._doSave())
+      .then(() => {
+        this.set('saving', false);
+        this._refresh(this);
+      })
+      .catch((err) => {
+        this.set('saving', false);
+        if (err && err['entity-type'] === 'validation_report') {
+          this.$.layout.reportValidation(err);
+        } else {
+          this.fire('notify', { message: this.i18n('documentEdit.saveError') });
+          console.error(err);
+        }
+      });
   },
 
   cancel() {
@@ -161,17 +191,5 @@ Polymer({
         this._dirtyProperties[prop] = this.document.properties[prop];
       }
     }
-  },
-
-  // trigger native browser invalid-form UI
-  _doNativeValidation(/* form */) {
-    /* var fakeSubmit = document.createElement('input');
-    fakeSubmit.setAttribute('type', 'submit');
-    fakeSubmit.style.display = 'none';
-    form._form.appendChild(fakeSubmit);
-    fakeSubmit.click();
-    form._form.removeChild(fakeSubmit);
-    return form._form.checkValidity(); */
-    return true;
   },
 });
