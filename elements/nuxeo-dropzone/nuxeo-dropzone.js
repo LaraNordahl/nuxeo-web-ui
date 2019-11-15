@@ -154,7 +154,7 @@ Polymer({
       <label id="label" required$="[[required]]">[[label]]</label>
     </template>
 
-    <input hidden id="input" type="file" on-change="_uploadInputFiles" />
+    <input hidden id="input" type="file" multiple$="[[multiple]]" on-change="_uploadInputFiles" />
 
     <div id="details" hidden$="[[!hasFiles]]">
       <template is="dom-repeat" items="[[files]]" as="file">
